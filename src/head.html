@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nanda Town Trace Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: control-room calm, a watchtower for agent trades
+   IDEA: an operator console: readouts on top, roster left, live channel right
+   PICTURE: the roster table with deal-rate meters plus the chat channel
+   COLOUR and TYPE: steel panel, black ink, white cards, alarm red for rejects, green-teal for deals; Inter Tight + Inter
+   LAYOUT: top bar with file picker, readout strip, two-column roster/channel, stacked under 900px */
+:root{color-scheme:light dark;
+--bg:light-dark(#d5dbe0,#16191c);--panel:light-dark(#fff,#1f2327);--ink:light-dark(#111,#eef1f3);
+--mute:light-dark(#5b6670,#9aa5ae);--line:light-dark(#c3cad0,#2e343a);--alarm:light-dark(#d4210f,#ff5a47);
+--ok:light-dark(#0b7a5c,#3fd0a2);--soft:light-dark(#eef1f3,#262b30);--hi:light-dark(#fff3f1,#3a2220)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,.num{font-family:"Inter Tight",Inter,system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;padding:18px max(3vw,16px);background:var(--ink);color:var(--bg)}
+header h1{margin:0;font-size:26px;line-height:1.05;color:light-dark(#fff,#111)}
+header p{margin:2px 0 0;font-size:13px;color:light-dark(#b9c2ca,#3d464e)}
+.file{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:600 15px Inter,sans-serif;min-height:44px;padding:0 18px;border-radius:8px;border:0;background:var(--alarm);color:#fff;cursor:pointer;display:inline-flex;align-items:center}
+.btn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,th:focus-visible,tr:focus-visible{outline:3px solid var(--alarm);outline-offset:2px}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
+.file:has(input:focus-visible) .btn{outline:3px solid var(--alarm);outline-offset:2px}
+#src{font-size:13px;color:light-dark(#d5dbe0,#2b3238);max-width:340px}
+#drop{position:fixed;inset:0;background:color-mix(in srgb,var(--alarm) 20%,transparent);border:4px dashed var(--alarm);display:none;place-items:center;font:700 28px "Inter Tight",sans-serif;z-index:9}
+#drop.on{display:grid}
+.band{padding:18px max(3vw,16px)}
+.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.card{background:var(--panel);border-radius:10px;padding:12px 14px;border:1px solid var(--line)}
+.card .num{font-size:clamp(24px,3vw,32px);font-weight:700;line-height:1.1}
+.card .lab{font-size:13px;color:var(--mute)}
+.card.bad .num{color:var(--alarm)}.card.good .num{color:var(--ok)}
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px;padding:0 max(3vw,16px) 30px;align-items:start}
+section.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.ph{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ph h2{margin:0;font-size:19px}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input[type=search],select{font:16px Inter,sans-serif;min-height:40px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--soft);color:var(--ink)}
+.chip{font:500 14px Inter,sans-serif;min-height:40px;padding:0 12px;border-radius:20px;border:1px solid var(--line);background:var(--soft);color:var(--ink);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.scroll{overflow:auto;max-height:70vh}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{position:sticky;top:0;background:var(--soft);text-align:left;font-weight:600;padding:9px 10px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}
+th .ar{display:inline-block;width:1em;color:var(--mute)}
+th[aria-sort] .ar{color:var(--alarm)}
+td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--soft)}
+tbody tr.sel{background:var(--ink);color:var(--panel)}tbody tr.sel .mut{color:inherit}
+tr.flag td:first-child{box-shadow:inset 4px 0 0 var(--alarm)}
+.mut{color:var(--mute)}
+.meter{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.meter i{display:block;width:48px;height:8px;border-radius:4px;background:light-dark(#f3c9c3,#4a2622);overflow:hidden}
+.meter b{display:block;height:100%;background:var(--ok)}
+.chan{max-height:calc(70vh + 46px);overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.who{font-size:13px;color:var(--mute);padding:10px 14px 0}
+.who strong{color:var(--ink)}
+.msg{max-width:88%;padding:8px 12px;border-radius:12px;background:var(--soft);border:1px solid var(--line)}
+.msg.me{align-self:flex-end;background:light-dark(#e6ebef,#2a3036)}
+.msg.sold{border-color:var(--ok);box-shadow:inset 3px 0 0 var(--ok)}
+.msg.reject{border-color:var(--alarm);box-shadow:inset 3px 0 0 var(--alarm);background:var(--hi)}
+.msg .top{display:flex;gap:8px;justify-content:space-between;font-size:12px;color:var(--mute)}
+.msg .top button{all:unset;cursor:pointer;font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:2px}
+.msg .body{font-weight:500}
+.tag{font-size:12px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--alarm);color:#fff}
+.empty{padding:30px 14px;color:var(--mute);text-align:center}
+.note{font-size:13px;color:var(--mute);padding:0 max(3vw,16px) 24px}
+@media(max-width:1450px){.hide-m{display:none}}
+@media(max-width:900px){main{grid-template-columns:minmax(0,1fr)}.scroll{max-height:none}.chan{max-height:70vh}}
+@media(max-width:600px){header h1{font-size:22px}table{font-size:13px}.hide-s{display:none}}
+@media(prefers-reduced-motion:no-preference){.msg{animation:in .18s ease-out}@keyframes in{from{opacity:0;transform:translateY(4px)}}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Nanda Town Trace Viewer</h1><p>Deals, rejections and conversations for every agent in a run</p></div>
+  <div class="file">
+    <label class="btn" for="f">Choose .jsonl file</label>
+    <input type="file" id="f" accept=".jsonl,.json,.txt,application/json">
+    <span id="src"></span>
+  </div>
+</header>
+<div id="drop">Drop the trace file to load it</div>
+<div class="band"><div class="readouts" id="cards"></div></div>
+<main>
+  <section class="panel">
+    <div class="ph"><h2>Agents</h2>
+      <div class="ctrl">
+        <input type="search" id="q" placeholder="Find agent" aria-label="Find agent">
+        <button class="chip" data-role="all" aria-pressed="true">All</button>
+        <button class="chip" data-role="buyer" aria-pressed="false">Buyers</button>
+        <button class="chip" data-role="seller" aria-pressed="false">Sellers</button>
+        <button class="chip" id="flagonly" aria-pressed="false">Flagged</button>
+      </div>
+    </div>
+    <div class="scroll"><table><thead><tr id="hdr"></tr></thead><tbody id="rows"></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="ph"><h2>Conversation</h2>
+      <div class="ctrl">
+        <select id="peer" aria-label="Counterpart"></select>
+        <select id="kindf" aria-label="Message filter">
+          <option value="all">All messages</option><option value="sold">Deals</option><option value="reject">Rejections</option><option value="dropped">Dropped</option>
+        </select>
+      </div>
+    </div>
+    <div class="who" id="who"></div>
+    <div class="chan" id="chan"></div>
+  </section>
+</main>
+<p class="note">Flagged agents have a deal rate more than 25 points away from the run's overall rate. Replies are paired with offers in file order, because the timestamps in these traces are all 0. A rejection's "reply value" is the number the seller sent back; in the default marketplace run each seller sends the same value in every rejection, so it is not an asking price. Everything is processed in your browser; the file is not uploaded.</p>
